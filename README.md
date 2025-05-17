@@ -14,7 +14,7 @@ Simple feedforward network for inference.
 
 ```
 gcc ffwd.c -o ffwd
-./ffwd path_to_saved_data path_to_saved_model
+./ffwd <path_to_saved_data> <path_to_saved_model>
 ```
 
 Optionally, to train the neural network (in PyTorch):
