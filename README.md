@@ -31,4 +31,5 @@ python train.py
 - [ ] Pick out a dataset
 - [ ] PyTorch for training model
 - [ ] Load weights in C
+- [ ] Load data in C
 - [ ] Network definition in C
