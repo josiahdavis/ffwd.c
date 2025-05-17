@@ -9,3 +9,18 @@ Simple feedforward network for inference.
 * Train a deep learning model using PyTorch and save weights.
 * Load weights & data and perform inference in pure C.
 * Supports Linear layers (weight & bias) and relu activation function.
+
+## Usage
+
+```
+gcc ffwd.c -o ffwd
+./ffwd path_to_saved_data path_to_saved_model
+```
+
+Optionally, to train the neural network (in PyTorch):
+
+```
+conda create -yn ffwd-c python=3.12
+pip install torch numpy
+python train.py
+```
