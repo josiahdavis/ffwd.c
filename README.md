@@ -21,6 +21,7 @@ Optionally, to train the neural network (in PyTorch):
 
 ```
 conda create -yn ffwd-c python=3.12
+conda activate ffwd-c
 pip install torch numpy
 python train.py
 ```
