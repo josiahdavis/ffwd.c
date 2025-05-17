@@ -28,7 +28,7 @@ python train.py
 
 ## To do
 
-- [] Pick out a dataset
-- [] PyTorch for training model
-- [] Load weights in C
-- [] Network definition in C
+- [ ] Pick out a dataset
+- [ ] PyTorch for training model
+- [ ] Load weights in C
+- [ ] Network definition in C
