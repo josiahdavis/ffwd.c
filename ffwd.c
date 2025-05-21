@@ -3,6 +3,11 @@
 #include <string.h>
 #include <math.h>
 
+typedef struct {
+    float *W, *b;
+    int input_size, output_size;
+} Linear;
+
 void matmul_bias(float* x, float* Wx, float* bias, float* out, int B, int C_in, int C_out){
     /*
     Computes: 
@@ -34,32 +39,38 @@ void relu(float *v, int size){
     }
 }
 
-void forward(float *x, int B, int C_in, int C, float* W_in, float* W1, float* W2, float* W3, float* W_out, 
-    float* b_in, float* b1, float* b2, float* b3, float* b_out, float* out){
-    
+void forward(float *x, int B, int C_in, Linear *layer_in, Linear *layer1, Linear *layer2
+    , Linear *layer3, Linear *layer_out, float* out){
     // Input Projection, followed by Relu
-    float* act1 = (float*) malloc(B * C * sizeof(float));
-    matmul_bias(x, W_in, b_in, act1, B, C_in, C);
-    relu(act1, B * C);
+    float* act1 = (float*) malloc(B * layer_in->output_size * sizeof(float));
+    matmul_bias(x, layer_in->W, layer_in->b, act1, B, C_in, layer_in->output_size);
+    relu(act1, B * layer_in->output_size);
 
     // Linear, followed by Relu
-    float* act2 = (float*) malloc(B * C * sizeof(float));
-    matmul_bias(act1, W1, b1, act2, B, C, C);
-    relu(act2, B * C);
+    float* act2 = (float*) malloc(B * layer1->output_size * sizeof(float));
+    // matmul_bias(act1, W1, b1, act2, B, C, C);
+    matmul_bias(act1, layer1->W, layer1->b, act2, B, layer1->input_size, layer1->output_size);
+    relu(act2, B * layer1->output_size);
 
     // Linear, followed by Relu
-    float* act3 = (float*) malloc(B * C * sizeof(float));
-    matmul_bias(act2, W2, b2, act3, B, C, C);
-    relu(act3, B * C);
+    float* act3 = (float*) malloc(B * layer2->output_size * sizeof(float));
+    // matmul_bias(act2, W2, b2, act3, B, C, C);
+    matmul_bias(act2, layer2->W, layer2->b, act3, B, layer2->input_size, layer2->output_size);
+    relu(act3, B * layer2->output_size);
 
     // Linear, followed by Relu
-    float* act4 = (float*) malloc(B * C * sizeof(float));
-    matmul_bias(act3, W3, b3, act4, B, C, C);
-    relu(act4, B * C);
+    float* act4 = (float*) malloc(B * layer3->output_size * sizeof(float));
+    // matmul_bias(act3, W3, b3, act4, B, C, C);
+    matmul_bias(act3, layer3->W, layer3->b, act4, B, layer3->input_size, layer3->output_size);
+    relu(act4, B * layer3->output_size);
 
     // Output projection
-    matmul_bias(act4, W_out, b_out, out, B, C, 1);
-
+    // matmul_bias(act4, W_out, b_out, out, B, C, 1);
+    matmul_bias(act4, layer_out->W, layer_out->b, out, B, layer_out->input_size, layer_out->output_size);
+    free(act1);
+    free(act2);
+    free(act3);
+    free(act4);
 }
 
 void read_csv(float* data, const char* file_location, int nrows, int ncols) {
@@ -116,26 +127,32 @@ int all_close(float *v1, float *v2, int size){
     return 1;
 }
 
+void init_layer(Linear* layer, int in_features, int out_features){
+    layer->W = (float*) malloc(in_features * out_features * sizeof(float));
+    layer->b = (float*) malloc(out_features * sizeof(float));
+    layer->input_size = in_features;
+    layer->output_size = out_features;
+}
+
+#ifndef TEST
+
 int main() {
     int B = 16;        // batch dim
     int C_in = 8;      // input feature size
     int C = 32;        // hidden feature size
 
-    // Allocate for model
-    float* W_in = (float*) malloc(C * C_in * sizeof(float));
-    float* b_in = (float*) malloc(C * sizeof(float));
-    
-    float* W1 = (float*) malloc(C * C * sizeof(float));
-    float* b1 = (float*) malloc(C * sizeof(float));
-    
-    float* W2 = (float*) malloc(C * C * sizeof(float));
-    float* b2 = (float*) malloc(C * sizeof(float));
-    
-    float* W3 = (float*) malloc(C * C * sizeof(float));
-    float* b3 = (float*) malloc(C * sizeof(float));
-    
-    float* W_out = (float*) malloc(1 * C * sizeof(float));
-    float* b_out = (float*) malloc(1 * sizeof(float));
+    // Allocate memory for model
+    Linear layer_in;
+    Linear layer1;
+    Linear layer2;
+    Linear layer3;
+    Linear layer_out;
+
+    init_layer(&layer_in, C_in, C);
+    init_layer(&layer1, C, C);
+    init_layer(&layer2, C, C);
+    init_layer(&layer3, C, C);
+    init_layer(&layer_out, C, 1);
     
     // Read model into memory
     FILE *model_file = fopen("/tmp/ffwd.bin", "rb");
@@ -143,54 +160,23 @@ int main() {
         printf("Error opening file\n");
     }
 
-    fread(W_in, sizeof(float), C * C_in, model_file);
-    fread(b_in, sizeof(float), C, model_file);
+    fread(layer_in.W, sizeof(float), C * C_in, model_file);
+    fread(layer_in.b, sizeof(float), C, model_file);
 
-    fread(W1, sizeof(float), C * C, model_file);
-    fread(b1, sizeof(float), C, model_file);
+    fread(layer1.W, sizeof(float), C * C, model_file);
+    fread(layer1.b, sizeof(float), C, model_file);
+    
+    fread(layer2.W, sizeof(float), C * C, model_file);
+    fread(layer2.b, sizeof(float), C, model_file);
 
-    fread(W2, sizeof(float), C * C, model_file);
-    fread(b2, sizeof(float), C, model_file);
+    fread(layer3.W, sizeof(float), C * C, model_file);
+    fread(layer3.b, sizeof(float), C, model_file);
 
-    fread(W3, sizeof(float), C * C, model_file);
-    fread(b3, sizeof(float), C, model_file);
-
-    fread(W_out, sizeof(float), 1 * C, model_file);
-    fread(b_out, sizeof(float), 1, model_file);
+    fread(layer_out.W, sizeof(float), 1 * C, model_file);
+    fread(layer_out.b, sizeof(float), 1, model_file);
     fclose(model_file);
 
-    // Allocate for test data
-    float* batch_features = (float*) malloc(B * C_in * sizeof(float));
-    float* batch_labels = (float*) malloc(B * sizeof(float));
-    float* out = (float*) malloc(1 * B * sizeof(float));
-    float* out_expected = (float*) malloc(1 * B * sizeof(float));
-
-    // Read test data into memory
-    FILE *test_data = fopen("/tmp/data.bin", "rb");
-    if (test_data == NULL) {
-        printf("Error opening file\n");
-    }
-    fread(batch_features, sizeof(float), B * C_in, test_data);
-    fread(batch_labels, sizeof(float), B, test_data);
-    fread(out_expected, sizeof(float), B, test_data);
-    fclose(test_data);
-
-    // Run forward pass on test data
-    forward(batch_features, B, C_in, C, W_in, W1, W2, W3, W_out, b_in, b1, b2, b3, b_out, out);
-    
-    // Print out info
-    print_matrix(W_out, C, 1, "W_out");
-    print_matrix(batch_features, B, C_in, "batch_features");
-    print_matrix(batch_labels, B, 1, "batch_labels");
-    print_matrix(out_expected, B, 1, "out_expected");
-    print_matrix(out, B, 1, "output");
-
-    // Check that we are getting expected results
-    int equal = all_close(out, out_expected, B * 1);
-    if (equal == 1) printf("✅ SUCCESS\n");
-    else if (equal == 0) printf("❌ ERROR\n");
-
-    // Read data into memory for inference
+    // Read features into memory
     int nrows = 20640;
     int ncols = C_in;
     float *features = malloc(nrows * C_in * sizeof(float));
@@ -199,7 +185,7 @@ int main() {
 
     // Make predictions
     float *predictions = malloc(nrows * 1 * sizeof(float));
-    forward(features, B, C_in, C, W_in, W1, W2, W3, W_out, b_in, b1, b2, b3, b_out, predictions);
+    forward(features, B, C_in, &layer_in, &layer1, &layer2, &layer3, &layer_out, predictions);
     print_matrix(predictions, B, 1, "Predictions");
 
     // Save predictions in text format
@@ -214,20 +200,12 @@ int main() {
     fclose(pred_file);
 
     // Clean up
-    free(W_in);
-    free(b_in);
-    free(W1);
-    free(b1);
-    free(W2);
-    free(b2);
-    free(W3);
-    free(b3);
-    free(W_out);
-    free(b_out);
-    free(batch_features);
-    free(batch_labels);
-    free(out_expected);
-    free(out);
-    free(features);
+    free(layer_in.W); free(layer_in.b);
+    free(layer1.W); free(layer1.b);
+    free(layer2.W); free(layer2.b);
+    free(layer3.W); free(layer3.b);
+    free(layer_out.W); free(layer_out.b);
+    free(features); free(predictions);
     return 0;
 }
+#endif
