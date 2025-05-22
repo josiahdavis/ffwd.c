@@ -51,19 +51,19 @@ void forward(float *x, int B, int C_in, Linear *layer_in, Linear *layer1, Linear
     // matmul_bias(act1, W1, b1, act2, B, C, C);
     matmul_bias(act1, layer1->W, layer1->b, act2, B, layer1->input_size, layer1->output_size);
     relu(act2, B * layer1->output_size);
-
+    
     // Linear, followed by Relu
     float* act3 = (float*) malloc(B * layer2->output_size * sizeof(float));
     // matmul_bias(act2, W2, b2, act3, B, C, C);
     matmul_bias(act2, layer2->W, layer2->b, act3, B, layer2->input_size, layer2->output_size);
     relu(act3, B * layer2->output_size);
-
+    
     // Linear, followed by Relu
     float* act4 = (float*) malloc(B * layer3->output_size * sizeof(float));
     // matmul_bias(act3, W3, b3, act4, B, C, C);
     matmul_bias(act3, layer3->W, layer3->b, act4, B, layer3->input_size, layer3->output_size);
     relu(act4, B * layer3->output_size);
-
+    
     // Output projection
     // matmul_bias(act4, W_out, b_out, out, B, C, 1);
     matmul_bias(act4, layer_out->W, layer_out->b, out, B, layer_out->input_size, layer_out->output_size);
@@ -77,33 +77,66 @@ void read_csv(float* data, const char* file_location, int nrows, int ncols) {
     // Poor man's csv file loader.
     // Assumes all data is numerical with no header. 
     // Stores in row-wise format.
-
-    int max_line_len = 10000;
-    char line[max_line_len];
-    char *token;
-
+    
     if (data == NULL) {
-        perror("Memory allocation failed\n");
+        fprintf(stderr, "Memory allocation failed\n");
+        return;
     }
-
+    
     FILE *file = fopen(file_location, "r");
     if (file == NULL){
-        perror("Missing file\n");
-    }
+        fprintf(stderr, "Failed to open file: %s\n", file_location);
+        return;
+    }    
 
+    char *line = NULL;
+    size_t len = 0; // size_t?
+    ssize_t read; // ssize_t?
+    
+    // Iterate through rows of the CSV file
     for (int i = 0; i < nrows; i++){
-        fgets(line, max_line_len, file);
+        // Read single row of data
+        // getline dynamically allocates memory. fgets requires pre-allocated buffer.
+        read = getline(&line, &len, file); 
+        if (read == -1) {
+            fprintf(stderr, "Error: not enough rows in CSV file (expected %d)\n", nrows);
+            fclose(file);
+            free(line);
+            return;
+        }
+        char *token;
+        char *saveptr;
+        
+        // Iterate through colunns of the individual row
+        // strtok_r preferred to strtok for thread-safety
+        token = strtok_r(line, ",", &saveptr); // gets first character in the row
         for (int j = 0; j < ncols; j++){
-            token = strtok(j == 0 ? line : NULL, ",");
             if (token == NULL){
-                perror("Error parsing row");
+                fprintf(stderr, "Error: Not enough columns in row %d (expected %d)\n", i+1, ncols);
                 fclose(file);
+                free(line);
+                return;
             }
-            data[i * ncols + j] = atof(token);
+            // Convert individual element (string) to float
+            // strtof is preferred to atof for robustness/error handling
+            char *endptr;
+            data[i * ncols + j] = strtof(token, &endptr);
+            
+            // Check whether conversion was successful 
+            if (token == endptr) {
+                fprintf(stderr, "Error parsing value at row %d, column %d\n", i+1, j+1);
+                fclose(file);
+                free(line);
+                return;
+            }
+
+            // Get the next character
+            token = strtok_r(NULL, ",", &saveptr);
         }
     }
     fclose(file);
-    printf("Loaded csv data\n");
+    free(line);
+    printf("Loaded csv data: %d rows, %d columns\n", nrows, ncols);
 }
 
 void print_matrix(const float* matrix, int rows, int cols, const char* name){
@@ -185,8 +218,8 @@ int main() {
 
     // Make predictions
     float *predictions = malloc(nrows * 1 * sizeof(float));
-    forward(features, B, C_in, &layer_in, &layer1, &layer2, &layer3, &layer_out, predictions);
-    print_matrix(predictions, B, 1, "Predictions");
+    forward(features, nrows, C_in, &layer_in, &layer1, &layer2, &layer3, &layer_out, predictions);
+    print_matrix(predictions, nrows, 1, "Predictions");
 
     // Save predictions in text format
     FILE *pred_file = fopen("/tmp/predictions.txt", "w");
