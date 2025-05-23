@@ -8,6 +8,11 @@ typedef struct {
     int input_size, output_size;
 } Linear;
 
+typedef struct {
+    Linear *layer; // Define FFWD as an array of linear layers
+    int num_layers;
+} FeedForward;
+
 void matmul_bias(float* x, float* Wx, float* bias, float* out, int B, int C_in, int C_out){
     /*
     Computes: 
@@ -136,7 +141,7 @@ void read_csv(float* data, const char* file_location, int nrows, int ncols) {
     }
     fclose(file);
     free(line);
-    printf("Loaded csv data: %d rows, %d columns\n", nrows, ncols);
+    printf("Loaded csv data from %s: %d rows, %d columns\n", file_location, nrows, ncols);
 }
 
 void print_matrix(const float* matrix, int rows, int cols, const char* name){
@@ -169,7 +174,12 @@ void init_layer(Linear* layer, int in_features, int out_features){
 
 #ifndef TEST
 
-int main() {
+int main(int argc, char *argv[]) {
+
+    const char *model_path = (argc > 1) ? argv[1] : "/tmp/ffwd.bin";
+    const char *features_path = (argc > 2) ? argv[2] : "/tmp/CaliforniaHousing/features.csv";
+    const char *output_path = (argc > 3) ? argv[3] : "/tmp/predictions.txt";
+
     int B = 16;        // batch dim
     int C_in = 8;      // input feature size
     int C = 32;        // hidden feature size
@@ -187,11 +197,12 @@ int main() {
     init_layer(&layer3, C, C);
     init_layer(&layer_out, C, 1);
     
-    // Read model into memory
-    FILE *model_file = fopen("/tmp/ffwd.bin", "rb");
+    FILE *model_file = fopen(model_path, "rb");
     if (model_file == NULL) {
-        printf("Error opening file\n");
+        fprintf(stderr, "Error opening file: %s\n", model_path);
+        return 1;
     }
+    printf("Loaded model from %s\n", model_path);
 
     fread(layer_in.W, sizeof(float), C * C_in, model_file);
     fread(layer_in.b, sizeof(float), C, model_file);
@@ -213,23 +224,35 @@ int main() {
     int nrows = 20640;
     int ncols = C_in;
     float *features = malloc(nrows * C_in * sizeof(float));
-    read_csv(features, "/tmp/CaliforniaHousing/features.csv", nrows, ncols);    
+    if (features == NULL) {
+        fprintf(stderr, "Failed to allocated memory for features\n");
+        return 1;
+    }
+    read_csv(features, features_path, nrows, ncols);    
     print_matrix(features, B, C_in, "Features");
 
     // Make predictions
     float *predictions = malloc(nrows * 1 * sizeof(float));
+    if (predictions == NULL) {
+        fprintf(stderr, "Failed to allocated memory for predictions\n");
+        free(features);
+        return 1;
+    }
     forward(features, nrows, C_in, &layer_in, &layer1, &layer2, &layer3, &layer_out, predictions);
     print_matrix(predictions, nrows, 1, "Predictions");
 
     // Save predictions in text format
-    FILE *pred_file = fopen("/tmp/predictions.txt", "w");
+    FILE *pred_file = fopen(output_path, "w");
     if (pred_file == NULL) {
-        printf("Error opening file\n");
+        fprintf(stderr, "Error opening output file: %s\n", output_path);
+        free(features);
+        free(predictions);
+        return 1;
     }
     for (int i = 0; i < nrows; i++) {
         fprintf(pred_file, "%f\n", predictions[i]);
     }
-    printf("Wrote predictions to disk.\n");
+    printf("Wrote predictions to %s.\n", output_path);
     fclose(pred_file);
 
     // Clean up
