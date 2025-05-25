@@ -7,9 +7,9 @@ int main(int argc, char *argv[]) {
     const char *features_path = (argc > 2) ? argv[2] : "/tmp/CaliforniaHousing/features.csv";
     const char *output_path = (argc > 3) ? argv[3] : "/tmp/predictions.txt";
 
-    int B = 16;        // batch dim
+    int B = 128;        // batch dim
     int C_in = 8;      // input feature size
-    int C = 32;        // hidden feature size
+    int C = 64;        // hidden feature size
 
     // Allocate for model
     // Instantiate and allocate memory for model

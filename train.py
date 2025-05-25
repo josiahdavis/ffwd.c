@@ -12,7 +12,7 @@ start = time.time()
 torch.manual_seed(42)
 
 batch_size = 128
-hidden_size = 32
+hidden_size = 64
 model_location = '/tmp/ffwd.bin'
 data_location = '/tmp/data.bin'
 

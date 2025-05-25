@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <time.h> 
 
 // Define Linear as pointer to weights and biases"
 typedef struct {
@@ -229,17 +230,17 @@ int all_close(float *v1, float *v2, int size){
 #ifndef TEST
 
 int main(int argc, char *argv[]) {
-
+    clock_t start = clock();
     // ---------------------------
     // Setup
     // ---------------------------
     const char *model_path = (argc > 1) ? argv[1] : "/tmp/ffwd.bin";
     const char *features_path = (argc > 2) ? argv[2] : "/tmp/CaliforniaHousing/features.csv";
-    const char *output_path = (argc > 3) ? argv[3] : "/tmp/predictions2.txt";
+    const char *output_path = (argc > 3) ? argv[3] : "/tmp/predictions.txt";
 
-    int B = 16;        // batch dim
+    int B = 128;        // batch dim
     int C_in = 8;      // input feature size
-    int C = 32;        // hidden feature size
+    int C = 64;        // hidden feature size
 
     int layer_sizes[] = {C_in, C, C, C, C, 1};
     // Standard way of getting the length of an array in C
@@ -303,6 +304,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    clock_t fwd_start = clock();
     for (int batch_start = 0; batch_start < nrows; batch_start += B){
         // Adjust Batch size for last batch if needed
         int B_curr = (batch_start + B > nrows) ? (nrows - batch_start) : B;
@@ -312,7 +314,9 @@ int main(int argc, char *argv[]) {
         //      batch_start * C_in = how many float values to skip
         forward(features + (batch_start * C_in), B_curr, C_in, ffwd, predictions + batch_start);
     }
-    forward(features, nrows, C_in, ffwd, predictions);
+    double fwd_time = ((double)(clock() - fwd_start))/CLOCKS_PER_SEC;
+    printf("forward pass completed in %7.4f seconds \n", fwd_time);
+
     print_matrix(predictions, nrows, 1, "Predictions");
 
     // ---------------------------
@@ -337,6 +341,8 @@ int main(int argc, char *argv[]) {
     free_model(ffwd);
     free(features); 
     free(predictions);
+    double prog_time = ((double)(clock() - fwd_start))/CLOCKS_PER_SEC;
+    printf("predictions completed in %7.4f seconds \n", prog_time);
     return 0;
 }
 #endif
