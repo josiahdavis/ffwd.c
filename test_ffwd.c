@@ -1,45 +1,48 @@
 #define TEST
 #include "ffwd.c"
 
-int main(){
+int main(int argc, char *argv[]) {
+
+    const char *model_path = (argc > 1) ? argv[1] : "/tmp/ffwd.bin";
+    const char *features_path = (argc > 2) ? argv[2] : "/tmp/CaliforniaHousing/features.csv";
+    const char *output_path = (argc > 3) ? argv[3] : "/tmp/predictions.txt";
+
     int B = 16;        // batch dim
     int C_in = 8;      // input feature size
     int C = 32;        // hidden feature size
 
     // Allocate for model
-    Linear layer_in;
-    Linear layer1;
-    Linear layer2;
-    Linear layer3;
-    Linear layer_out;
-
-    init_layer(&layer_in, C_in, C);
-    init_layer(&layer1, C, C);
-    init_layer(&layer2, C, C);
-    init_layer(&layer3, C, C);
-    init_layer(&layer_out, C, 1);
-    
-    // Read model into memory
-    FILE *model_file = fopen("/tmp/ffwd.bin", "rb");
-    if (model_file == NULL) {
-        printf("Error opening file\n");
+    // Instantiate and allocate memory for model
+    int layer_sizes[] = {C_in, C, C, C, C, 1};
+    // Standard way of getting the length of an array in C
+    int n_layers = sizeof(layer_sizes) / sizeof(layer_sizes[0]) - 1;
+    FeedForward *ffwd = create_model(n_layers, layer_sizes);
+    if (ffwd == NULL){
+        fprintf(stderr, "Failed to create model\n");
+        return 1;
     }
 
-    fread(layer_in.W, sizeof(float), C * C_in, model_file);
-    fread(layer_in.b, sizeof(float), C, model_file);
+    // Load model weights
+    FILE *model_file = fopen(model_path, "rb");
+    if (model_file == NULL) {
+        fprintf(stderr, "Error opening file: %s\n", model_path);
+        free_model(ffwd);
+        return 1;
+    }
+    printf("Loaded model from %s\n", model_path);
+    for (int i = 0; i < n_layers; i++) {
+        size_t W_size = ffwd->layer[i].input_size * ffwd->layer[i].output_size;
+        size_t b_size = ffwd->layer[i].output_size;
 
-    fread(layer1.W, sizeof(float), C * C, model_file);
-    fread(layer1.b, sizeof(float), C, model_file);
-    
-    fread(layer2.W, sizeof(float), C * C, model_file);
-    fread(layer2.b, sizeof(float), C, model_file);
-
-    fread(layer3.W, sizeof(float), C * C, model_file);
-    fread(layer3.b, sizeof(float), C, model_file);
-
-    fread(layer_out.W, sizeof(float), 1 * C, model_file);
-    fread(layer_out.b, sizeof(float), 1, model_file);
-
+        // fread returns number of elements read successfully from file.
+        if (fread(ffwd->layer[i].W, sizeof(float), W_size, model_file) != W_size || 
+            fread(ffwd->layer[i].b, sizeof(float), b_size, model_file) != b_size) {
+                fprintf(stderr, "Error reading model parameters for layer %d\n", i);
+                fclose(model_file);
+                free_model(ffwd);
+                return 1;
+            }
+    }
     fclose(model_file);
 
     // Allocate for test data
@@ -59,10 +62,9 @@ int main(){
     fclose(test_data);
 
     // Run forward pass on test data
-    forward(batch_features, B, C_in, &layer_in, &layer1, &layer2, &layer3, &layer_out, out);
+    forward(batch_features, B, C_in, ffwd, out);
     
     // Print out info
-    // print_matrix(&layer_out->W, C, 1, "W_out");
     print_matrix(batch_features, B, C_in, "batch_features");
     print_matrix(batch_labels, B, 1, "batch_labels");
     print_matrix(out_expected, B, 1, "out_expected");
@@ -74,16 +76,11 @@ int main(){
     else if (equal == 0) printf("❌ ERROR\n");
 
     // Clean up
-    free(layer_in.W); free(layer_in.b);
-    free(layer1.W); free(layer1.b);
-    free(layer2.W); free(layer2.b);
-    free(layer3.W); free(layer3.b);
-    free(layer_out.W); free(layer_out.b);
 
     free(batch_features);
     free(batch_labels);
     free(out_expected);
     free(out);
-
+    free_model(ffwd);
     return 0;
 }

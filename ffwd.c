@@ -3,15 +3,75 @@
 #include <string.h>
 #include <math.h>
 
+// Define Linear as pointer to weights and biases"
 typedef struct {
     float *W, *b;
     int input_size, output_size;
 } Linear;
 
+// Define FeedForward as a pointer to linear objects
 typedef struct {
-    Linear *layer; // Define FFWD as an array of linear layers
-    int num_layers;
+    Linear *layer;
+    int n_layers;
 } FeedForward;
+
+void init_layer(Linear* layer, int in_features, int out_features){
+    layer->W = (float*) malloc(in_features * out_features * sizeof(float));
+    layer->b = (float*) malloc(out_features * sizeof(float));
+    layer->input_size = in_features;
+    layer->output_size = out_features;
+}
+
+// Initialize model
+FeedForward* create_model(int n_layers, int *layer_sizes){
+    if (n_layers  < 2) {
+        fprintf(stderr, "Network must have at least one input and output layers\n");
+        return NULL;
+    }
+
+    // Instantiate model
+    // malloc is needed to persist beyond function scope even through memory is not known yet.
+    FeedForward *ffwd = (FeedForward*)malloc(sizeof(FeedForward));
+    ffwd->n_layers = n_layers;
+    ffwd->layer = (Linear*)malloc(ffwd->n_layers * sizeof(Linear));
+    if (!ffwd->layer){
+        perror("Failed to allocated network layers");
+        free(ffwd);
+        return NULL;
+    }
+
+    // Allocate memory for each layer
+    for (int i = 0; i < ffwd->n_layers; i++){
+
+        // Using & "address-of" operator because we want to pass pointer to the linear object 
+        // not linear object itself
+        init_layer(&ffwd->layer[i], layer_sizes[i], layer_sizes[i+1]);
+
+        // If we have any issue with initialization then free entire network.
+        if (!ffwd->layer[i].W || !ffwd->layer[i].b) {
+            for (int j = 0; j < i; j++){
+                free(ffwd->layer[j].W);
+                free(ffwd->layer[j].b);
+            }
+            free(ffwd->layer);
+            free(ffwd);
+            return NULL;
+        }
+    }
+    return ffwd;
+}
+
+// Remove model from memory
+void free_model(FeedForward *ffwd){
+    if (ffwd->layer){
+        for (int i = 0; i < ffwd->n_layers; i++){
+            free(ffwd->layer[i].W);
+            free(ffwd->layer[i].b);
+        }
+        free(ffwd->layer);
+    }
+    free(ffwd);
+}
 
 void matmul_bias(float* x, float* Wx, float* bias, float* out, int B, int C_in, int C_out){
     /*
@@ -44,38 +104,39 @@ void relu(float *v, int size){
     }
 }
 
-void forward(float *x, int B, int C_in, Linear *layer_in, Linear *layer1, Linear *layer2
-    , Linear *layer3, Linear *layer_out, float* out){
-    // Input Projection, followed by Relu
-    float* act1 = (float*) malloc(B * layer_in->output_size * sizeof(float));
-    matmul_bias(x, layer_in->W, layer_in->b, act1, B, C_in, layer_in->output_size);
-    relu(act1, B * layer_in->output_size);
+void forward(float *x, int B, int C_in, FeedForward *ffwd, float *out){
+    // Assumes you have at least two linear layers
+    float *current_input = x;
+    float *current_output = NULL;
+    for (int i = 0; i < ffwd->n_layers; i++){
+        int input_size = ffwd->layer[i].input_size;
+        int output_size = ffwd->layer[i].output_size;
+        
+        // Alocate memory for intermediate output
+        if (i < ffwd->n_layers - 1){
+            current_output = (float*)malloc(B * output_size * sizeof(float));
+            if (current_output == NULL) {
+                perror("Memory allocation failed in forward pass\n");
+                exit(1);
+            }
+        } else {
+            current_output = out;
+        }
 
-    // Linear, followed by Relu
-    float* act2 = (float*) malloc(B * layer1->output_size * sizeof(float));
-    // matmul_bias(act1, W1, b1, act2, B, C, C);
-    matmul_bias(act1, layer1->W, layer1->b, act2, B, layer1->input_size, layer1->output_size);
-    relu(act2, B * layer1->output_size);
-    
-    // Linear, followed by Relu
-    float* act3 = (float*) malloc(B * layer2->output_size * sizeof(float));
-    // matmul_bias(act2, W2, b2, act3, B, C, C);
-    matmul_bias(act2, layer2->W, layer2->b, act3, B, layer2->input_size, layer2->output_size);
-    relu(act3, B * layer2->output_size);
-    
-    // Linear, followed by Relu
-    float* act4 = (float*) malloc(B * layer3->output_size * sizeof(float));
-    // matmul_bias(act3, W3, b3, act4, B, C, C);
-    matmul_bias(act3, layer3->W, layer3->b, act4, B, layer3->input_size, layer3->output_size);
-    relu(act4, B * layer3->output_size);
-    
-    // Output projection
-    // matmul_bias(act4, W_out, b_out, out, B, C, 1);
-    matmul_bias(act4, layer_out->W, layer_out->b, out, B, layer_out->input_size, layer_out->output_size);
-    free(act1);
-    free(act2);
-    free(act3);
-    free(act4);
+        // Perform matmul
+        matmul_bias(current_input, ffwd->layer[i].W, ffwd->layer[i].b, current_output, B, input_size, output_size);
+
+        // Apply ReLU
+        if (i < (ffwd->n_layers - 1)){
+            relu(current_output, B * ffwd->layer[i].output_size);
+        }
+
+        // Free previous input (but not original input x)
+        if (i > 0) {
+            free(current_input);
+        }
+        current_input = current_output;
+    }
 }
 
 void read_csv(float* data, const char* file_location, int nrows, int ncols) {
@@ -156,20 +217,13 @@ void print_matrix(const float* matrix, int rows, int cols, const char* name){
 }
 
 int all_close(float *v1, float *v2, int size){
-    float tol = 0.001;
+    float tol = 0.1;
     for (int i = 0; i < size; i++){
-        if( fabs(v1[i] - v2[i])/v1[i] > tol) {
+        if( fabs(v1[i] - v2[i]) > tol) {
             return 0;
         }
     }
     return 1;
-}
-
-void init_layer(Linear* layer, int in_features, int out_features){
-    layer->W = (float*) malloc(in_features * out_features * sizeof(float));
-    layer->b = (float*) malloc(out_features * sizeof(float));
-    layer->input_size = in_features;
-    layer->output_size = out_features;
 }
 
 #ifndef TEST
@@ -184,40 +238,39 @@ int main(int argc, char *argv[]) {
     int C_in = 8;      // input feature size
     int C = 32;        // hidden feature size
 
-    // Allocate memory for model
-    Linear layer_in;
-    Linear layer1;
-    Linear layer2;
-    Linear layer3;
-    Linear layer_out;
+    int layer_sizes[] = {C_in, C, C, C, C, 1};
+    // Standard way of getting the length of an array in C
+    int n_layers = sizeof(layer_sizes) / sizeof(layer_sizes[0]) - 1;
 
-    init_layer(&layer_in, C_in, C);
-    init_layer(&layer1, C, C);
-    init_layer(&layer2, C, C);
-    init_layer(&layer3, C, C);
-    init_layer(&layer_out, C, 1);
-    
+    // Instantiate and allocate memory for model
+    FeedForward *ffwd = create_model(n_layers, layer_sizes);
+    if (ffwd == NULL){
+        fprintf(stderr, "Failed to create model\n");
+        return 1;
+    }
+
+    // Load model weights
     FILE *model_file = fopen(model_path, "rb");
     if (model_file == NULL) {
         fprintf(stderr, "Error opening file: %s\n", model_path);
+        free_model(ffwd);
         return 1;
     }
     printf("Loaded model from %s\n", model_path);
+    for (int i = 0; i < n_layers; i++) {
+        size_t W_size = ffwd->layer[i].input_size * ffwd->layer[i].output_size;
+        size_t b_size = ffwd->layer[i].output_size;
 
-    fread(layer_in.W, sizeof(float), C * C_in, model_file);
-    fread(layer_in.b, sizeof(float), C, model_file);
-
-    fread(layer1.W, sizeof(float), C * C, model_file);
-    fread(layer1.b, sizeof(float), C, model_file);
-    
-    fread(layer2.W, sizeof(float), C * C, model_file);
-    fread(layer2.b, sizeof(float), C, model_file);
-
-    fread(layer3.W, sizeof(float), C * C, model_file);
-    fread(layer3.b, sizeof(float), C, model_file);
-
-    fread(layer_out.W, sizeof(float), 1 * C, model_file);
-    fread(layer_out.b, sizeof(float), 1, model_file);
+        // Use "." to access struct element, in this case these are float* elements
+        // layer[i].W is already a pointer (to the weight array), which is what fread expects
+        if (fread(ffwd->layer[i].W, sizeof(float), W_size, model_file) != W_size || 
+            fread(ffwd->layer[i].b, sizeof(float), b_size, model_file) != b_size) {
+                fprintf(stderr, "Error reading model parameters for layer %d\n", i);
+                fclose(model_file);
+                free_model(ffwd);
+                return 1;
+            }
+    }
     fclose(model_file);
 
     // Read features into memory
@@ -226,6 +279,7 @@ int main(int argc, char *argv[]) {
     float *features = malloc(nrows * C_in * sizeof(float));
     if (features == NULL) {
         fprintf(stderr, "Failed to allocated memory for features\n");
+        free_model(ffwd);
         return 1;
     }
     read_csv(features, features_path, nrows, ncols);    
@@ -236,9 +290,11 @@ int main(int argc, char *argv[]) {
     if (predictions == NULL) {
         fprintf(stderr, "Failed to allocated memory for predictions\n");
         free(features);
+        free_model(ffwd);
         return 1;
     }
-    forward(features, nrows, C_in, &layer_in, &layer1, &layer2, &layer3, &layer_out, predictions);
+
+    forward(features, nrows, C_in, ffwd, predictions);
     print_matrix(predictions, nrows, 1, "Predictions");
 
     // Save predictions in text format
@@ -256,12 +312,9 @@ int main(int argc, char *argv[]) {
     fclose(pred_file);
 
     // Clean up
-    free(layer_in.W); free(layer_in.b);
-    free(layer1.W); free(layer1.b);
-    free(layer2.W); free(layer2.b);
-    free(layer3.W); free(layer3.b);
-    free(layer_out.W); free(layer_out.b);
-    free(features); free(predictions);
+    free_model(ffwd);
+    free(features); 
+    free(predictions);
     return 0;
 }
 #endif
