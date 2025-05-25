@@ -230,9 +230,12 @@ int all_close(float *v1, float *v2, int size){
 
 int main(int argc, char *argv[]) {
 
+    // ---------------------------
+    // Setup
+    // ---------------------------
     const char *model_path = (argc > 1) ? argv[1] : "/tmp/ffwd.bin";
     const char *features_path = (argc > 2) ? argv[2] : "/tmp/CaliforniaHousing/features.csv";
-    const char *output_path = (argc > 3) ? argv[3] : "/tmp/predictions.txt";
+    const char *output_path = (argc > 3) ? argv[3] : "/tmp/predictions2.txt";
 
     int B = 16;        // batch dim
     int C_in = 8;      // input feature size
@@ -242,14 +245,16 @@ int main(int argc, char *argv[]) {
     // Standard way of getting the length of an array in C
     int n_layers = sizeof(layer_sizes) / sizeof(layer_sizes[0]) - 1;
 
-    // Instantiate and allocate memory for model
+    // Instantiate model
     FeedForward *ffwd = create_model(n_layers, layer_sizes);
     if (ffwd == NULL){
         fprintf(stderr, "Failed to create model\n");
         return 1;
     }
 
+    // ---------------------------
     // Load model weights
+    // ---------------------------
     FILE *model_file = fopen(model_path, "rb");
     if (model_file == NULL) {
         fprintf(stderr, "Error opening file: %s\n", model_path);
@@ -273,7 +278,9 @@ int main(int argc, char *argv[]) {
     }
     fclose(model_file);
 
-    // Read features into memory
+    // ---------------------------
+    // Load features
+    // ---------------------------
     int nrows = 20640;
     int ncols = C_in;
     float *features = malloc(nrows * C_in * sizeof(float));
@@ -285,7 +292,9 @@ int main(int argc, char *argv[]) {
     read_csv(features, features_path, nrows, ncols);    
     print_matrix(features, B, C_in, "Features");
 
-    // Make predictions
+    // ---------------------------
+    // Predict
+    // ---------------------------
     float *predictions = malloc(nrows * 1 * sizeof(float));
     if (predictions == NULL) {
         fprintf(stderr, "Failed to allocated memory for predictions\n");
@@ -294,10 +303,21 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    for (int batch_start = 0; batch_start < nrows; batch_start += B){
+        // Adjust Batch size for last batch if needed
+        int B_curr = (batch_start + B > nrows) ? (nrows - batch_start) : B;
+        // Pointer arithmatic: features + (batch_start * C_in) = where in memory the current batch starts
+        //      batch_start =  which sample to start from (0, 16, 32, 48, ...)
+        //      C_in = number of features per sample
+        //      batch_start * C_in = how many float values to skip
+        forward(features + (batch_start * C_in), B_curr, C_in, ffwd, predictions + batch_start);
+    }
     forward(features, nrows, C_in, ffwd, predictions);
     print_matrix(predictions, nrows, 1, "Predictions");
 
-    // Save predictions in text format
+    // ---------------------------
+    // Save predictions to text file
+    // ---------------------------
     FILE *pred_file = fopen(output_path, "w");
     if (pred_file == NULL) {
         fprintf(stderr, "Error opening output file: %s\n", output_path);
@@ -311,7 +331,9 @@ int main(int argc, char *argv[]) {
     printf("Wrote predictions to %s.\n", output_path);
     fclose(pred_file);
 
+    // ---------------------------
     // Clean up
+    // ---------------------------
     free_model(ffwd);
     free(features); 
     free(predictions);
