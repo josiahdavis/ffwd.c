@@ -11,7 +11,7 @@ from torch.utils.data import Dataset, DataLoader, random_split
 start = time.time()
 torch.manual_seed(42)
 
-batch_size = 16
+batch_size = 128
 hidden_size = 32
 model_location = '/tmp/ffwd.bin'
 data_location = '/tmp/data.bin'
@@ -155,6 +155,7 @@ with open(model_location, 'wb') as file:
 print(f'Saving data to {data_location}')
 with open(data_location, 'wb') as data:
     # Data sample
+    batch_features, batch_labels = next(iter(train_loader))
     write_tensor(batch_features, data)          # (B, C_in)
     write_tensor(batch_labels, data)            # (B, 1)
 
@@ -165,6 +166,6 @@ with open(data_location, 'wb') as data:
 print(f'Predicting on all data \n{model(torch.tensor(features, dtype=torch.float32))[:8]}')
 print(f'B={batch_size}, C_in={input_size}, C={hidden_size}')
 print(f'W_out=\n{model.linear_out.weight.t()[:8, :8]}')
-print(f'batch_labels=\n{batch_labels[:8]}')
-print(f'out_expected=\n{out_expected[:8]}')
+print(f'batch_labels ({batch_labels.shape})=\n{batch_labels[:8]}')
+print(f'out_expected ({out_expected.shape})=\n{out_expected[:8]}')
 print(f'Completed in {(time.time() - start) / 60:.2f} minutes')
