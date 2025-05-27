@@ -218,9 +218,10 @@ void print_matrix(const float* matrix, int rows, int cols, const char* name){
 }
 
 int all_close(float *v1, float *v2, int size){
-    float tol = 0.1;
+    float tol = 0.001;
     for (int i = 0; i < size; i++){
-        if( fabs(v1[i] - v2[i]) > tol) {
+        if( fabs(v1[i] - v2[i])/v2[i] > tol) {
+            printf("%7.4f != %7.4f \n", v1[i], v2[i]);
             return 0;
         }
     }
@@ -238,9 +239,9 @@ int main(int argc, char *argv[]) {
     const char *features_path = (argc > 2) ? argv[2] : "/tmp/CaliforniaHousing/features.csv";
     const char *output_path = (argc > 3) ? argv[3] : "/tmp/predictions.txt";
 
-    int B = 128;        // batch dim
-    int C_in = 8;      // input feature size
-    int C = 64;        // hidden feature size
+    int B = 1024;        // batch dim
+    int C_in = 8;        // input feature size
+    int C = 1024;        // hidden feature size
 
     int layer_sizes[] = {C_in, C, C, C, C, 1};
     // Standard way of getting the length of an array in C

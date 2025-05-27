@@ -4,12 +4,11 @@
 int main(int argc, char *argv[]) {
 
     const char *model_path = (argc > 1) ? argv[1] : "/tmp/ffwd.bin";
-    const char *features_path = (argc > 2) ? argv[2] : "/tmp/CaliforniaHousing/features.csv";
-    const char *output_path = (argc > 3) ? argv[3] : "/tmp/predictions.txt";
+    const char *test_data_path = (argc > 2) ? argv[2] : "/tmp/data.bin";
 
-    int B = 128;        // batch dim
-    int C_in = 8;      // input feature size
-    int C = 64;        // hidden feature size
+    int B = 1024;        // batch dim
+    int C_in = 8;        // input feature size
+    int C = 1024;        // hidden feature size
 
     // Allocate for model
     // Instantiate and allocate memory for model
@@ -52,7 +51,7 @@ int main(int argc, char *argv[]) {
     float* out_expected = (float*) malloc(1 * B * sizeof(float));
 
     // Read test data into memory
-    FILE *test_data = fopen("/tmp/data.bin", "rb");
+    FILE *test_data = fopen(test_data_path, "rb");
     if (test_data == NULL) {
         printf("Error opening file\n");
     }
@@ -60,9 +59,12 @@ int main(int argc, char *argv[]) {
     fread(batch_labels, sizeof(float), B, test_data);
     fread(out_expected, sizeof(float), B, test_data);
     fclose(test_data);
+    printf("Loaded test data from from %s\n", test_data_path);
 
     // Run forward pass on test data
+    clock_t fwd_start = clock();
     forward(batch_features, B, C_in, ffwd, out);
+    double fwd_time = ((double)(clock() - fwd_start))/CLOCKS_PER_SEC;
     
     // Print out info
     print_matrix(batch_features, B, C_in, "batch_features");
@@ -74,6 +76,7 @@ int main(int argc, char *argv[]) {
     int equal = all_close(out, out_expected, B * 1);
     if (equal == 1) printf("✅ SUCCESS\n");
     else if (equal == 0) printf("❌ ERROR\n");
+    printf("Forward pass completed in %7.4f seconds \n", fwd_time);
 
     // Clean up
 

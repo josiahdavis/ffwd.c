@@ -11,8 +11,8 @@ from torch.utils.data import Dataset, DataLoader, random_split
 start = time.time()
 torch.manual_seed(42)
 
-batch_size = 128
-hidden_size = 64
+batch_size = 1024
+hidden_size = 1024
 model_location = '/tmp/ffwd.bin'
 data_location = '/tmp/data.bin'
 
