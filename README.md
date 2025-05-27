@@ -43,3 +43,15 @@ Step 2: run inference in pure C
 gcc ffwd.c -o ffwd
 ./ffwd
 ```
+
+## Timing
+
+Running the forward pass on a single 1024 batch with 3 hidden layers and an hidden dimension of 1024 I recorded the following timings:
+
+| Version | Time |
+| --- | --- |
+| Initial naive implmentation | 8.8693 seconds |
+| Cache-aware Loop reorder | 4.75312 seconds |
+| ^ + Memory Access optimization of X | 3.67578 seconds |
+
+Results average over 5 runs on my  Mac M4, (16GB, Sequoia 15.5).

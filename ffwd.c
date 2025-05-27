@@ -84,24 +84,38 @@ void matmul_bias(float* x, float* Wx, float* bias, float* out, int B, int C_in, 
          bias (C_out,     )
          out  (B,    C_out)
     */
+    
+    // Initialize bias in output
+    if (bias != NULL) {
+        for (int b = 0; b < B; b++){
+            for (int c = 0; c < C_out; c++) {
+                out[b * C_out + c] = bias[c];
+            }
+        }
+    } else {
+        memset(out, 0, B * C_out * sizeof(float));
+    }
 
+    // Perform matmul with (cache-aware) loop reodering
     for (int b = 0; b < B; b++){
-        for (int c = 0; c < C_out; c++){
-            // compute dot product of row of x and column of Wx.
-            float dot = (bias != NULL) ? bias[c] : 0.0f;
-            for (int i = 0; i < C_in; i++){
+        for (int i = 0; i < C_in; i++){
+            // Small memory access optimization
+            float x_val = x[b * C_in + i];
+            for (int c = 0; c < C_out; c++){
                 // formula for indexing into a matrix to get correct element:
                 //      row index * column width + column index
-                dot += x[b * C_in + i] * Wx[i * C_out + c];
+                //          out = b * C_out + c
+                //            x = b * C_in + i
+                //           Wx = i * C_out + c
+                out[b * C_out + c] += x_val * Wx[i * C_out + c];
             }
-            out[b * C_out + c] = dot;
         }
     }
 }
 
 void relu(float *v, int size){
     for (int i = 0; i < size; i++){
-        if (v[i] < 0) v[i] = 0;
+        v[i] = (v[i] > 0) ? v[i] : 0;
     }
 }
 
@@ -157,8 +171,8 @@ void read_csv(float* data, const char* file_location, int nrows, int ncols) {
     }    
 
     char *line = NULL;
-    size_t len = 0; // size_t?
-    ssize_t read; // ssize_t?
+    size_t len = 0;
+    ssize_t read;
     
     // Iterate through rows of the CSV file
     for (int i = 0; i < nrows; i++){
