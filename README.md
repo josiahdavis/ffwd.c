@@ -50,8 +50,8 @@ Running the forward pass on a single 1024 batch with 3 hidden layers and an hidd
 
 | Version | Time |
 | --- | --- |
-| Initial naive implmentation | 8.8693 seconds |
+| Initial naive implementation | 8.8693 seconds |
 | Cache-aware Loop reorder | 4.75312 seconds |
-| ^ + Memory Access optimization of X | 3.67578 seconds |
+| Loop reorder + memory access optimization of x | 3.67578 seconds |
 
 Results average over 5 runs on my  Mac M4, (16GB, Sequoia 15.5).
